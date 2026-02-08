@@ -1,0 +1,138 @@
+---
+title: "Reproducible Research: Course Project 1"
+author: "Nikita Pavlov"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: html_document
+---
+
+## A. Preparing data for analysis
+
+```{r setup, echo=TRUE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+
+# Load the data
+activity <- read.csv("activity.csv", stringsAsFactors = FALSE)
+
+# Convert date column
+activity$date <- as.Date(activity$date)
+
+# Inspect the data
+str(activity)
+summary(activity)
+```
+
+## B. What is the mean total number of steps taken per day?
+
+For this part of the assignment, missing values are ignored to establish a baseline.
+
+```{r steps-per-day}
+steps_per_day <- aggregate(steps ~ date, data = activity, sum, na.rm = TRUE)
+head(steps_per_day)
+```
+
+```{r histogram-steps}
+ggplot(steps_per_day, aes(x = steps)) +
+  geom_histogram(binwidth = 1000) +
+  labs(
+    title = "Histogram of total steps per day (NA removed)",
+    x = "Total steps per day",
+    y = "Frequency"
+  )
+```
+
+```{r mean-median}
+mean_steps <- mean(steps_per_day$steps)
+median_steps <- median(steps_per_day$steps)
+
+mean_steps
+median_steps
+```
+
+## C. What is the average daily activity pattern?
+
+```{r avg-interval}
+avg_by_interval <- aggregate(steps ~ interval, data = activity, mean, na.rm = TRUE)
+head(avg_by_interval)
+```
+
+```{r time-series}
+plot(
+  avg_by_interval$interval,
+  avg_by_interval$steps,
+  type = "l",
+  xlab = "5-minute interval",
+  ylab = "Average number of steps",
+  main = "Average daily activity pattern"
+)
+```
+
+```{r max-interval}
+avg_by_interval[which.max(avg_by_interval$steps), ]
+```
+
+## D. Imputing missing values
+
+```{r missing-count}
+sum(is.na(activity$steps))
+```
+
+Missing values are imputed using the mean number of steps for each 5-minute interval across all days.
+
+```{r impute}
+interval_means <- avg_by_interval
+names(interval_means)[2] <- "interval_mean"
+
+activity_imputed <- merge(activity, interval_means, by = "interval", all.x = TRUE)
+activity_imputed <- activity_imputed[order(activity_imputed$date, activity_imputed$interval), ]
+
+na_idx <- is.na(activity_imputed$steps)
+activity_imputed$steps[na_idx] <- activity_imputed$interval_mean[na_idx]
+activity_imputed$interval_mean <- NULL
+
+sum(is.na(activity_imputed$steps))
+```
+
+```{r histogram-imputed}
+steps_per_day_imputed <- aggregate(steps ~ date, data = activity_imputed, sum)
+
+ggplot(steps_per_day_imputed, aes(x = steps)) +
+  geom_histogram(binwidth = 1000) +
+  labs(
+    title = "Histogram of total steps per day (after imputation)",
+    x = "Total steps per day",
+    y = "Frequency"
+  )
+```
+
+```{r mean-median-imputed}
+mean(steps_per_day_imputed$steps)
+median(steps_per_day_imputed$steps)
+```
+
+## E. Are there differences in activity patterns between weekdays and weekends?
+
+```{r weekday-weekend}
+activity_imputed$day_type <- ifelse(
+  weekdays(activity_imputed$date) %in% c("Saturday", "Sunday"),
+  "weekend",
+  "weekday"
+)
+activity_imputed$day_type <- factor(activity_imputed$day_type)
+
+table(activity_imputed$day_type)
+```
+
+```{r panel-plot}
+avg_interval_daytype <- aggregate(steps ~ interval + day_type, data = activity_imputed, mean)
+
+ggplot(avg_interval_daytype, aes(x = interval, y = steps)) +
+  geom_line() +
+  facet_wrap(~ day_type, ncol = 1) +
+  labs(
+    title = "Average steps per 5-minute interval: Weekdays vs Weekends",
+    x = "5-minute interval",
+    y = "Average number of steps"
+  )
+```
